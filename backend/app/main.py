@@ -1,12 +1,16 @@
 from contextlib import asynccontextmanager
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.core.config import BACKEND_DIR, settings
+
+load_dotenv(BACKEND_DIR / ".env", override=False)
+
 from app.api.v1 import dreams, health
-from app.core.config import settings
 from app.core.database import init_db
 from app.core.exceptions import AppError
 from app.data.seed_dreams import seed_demo_dreams
@@ -16,6 +20,8 @@ from app.storage.image_storage import ImageStorage
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    settings.require_llm_credentials()
+    settings.require_image_credentials()
     init_db()
     storage = ImageStorage()
     storage.ensure_mock_assets()
