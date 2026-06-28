@@ -1,0 +1,8 @@
+fastapi>=0.135.1
+pydantic>=2.12
+uvicorn[standard]>=0.42.0
+
+# Optional: install LangGraph to run the same organizer pipeline through StateGraph.
+# The app falls back to the local linear pipeline when LangGraph is unavailable.
+# langgraph>=0.2.0
+
