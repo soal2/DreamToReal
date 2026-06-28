@@ -1,15 +1,24 @@
-import type { Dream } from '../types/dream';
+import type { ReactNode } from "react";
+import { resolveImageUrl } from "../lib/imageUrl";
+import { formatTimeLabel, getPaletteClass } from "../lib/dreamDerived";
+import type { DreamListItem, DreamRecord } from "../types/dream";
+
+type DreamCardDream = Pick<DreamRecord | DreamListItem, "id" | "title" | "image_url" | "keywords" | "created_at"> & {
+  scenes?: string[];
+};
 
 type DreamCardProps = {
-  dream: Dream;
+  dream: DreamCardDream;
   onClick: () => void;
   tags?: string[];
   thumbnailClassName?: string;
-  marker?: React.ReactNode;
+  marker?: ReactNode;
 };
 
 export function DreamCard({ dream, onClick, tags, thumbnailClassName, marker }: DreamCardProps) {
-  const visibleTags = tags ?? dream.tags.slice(0, 3);
+  const visibleTags = (tags ?? dream.keywords ?? []).slice(0, 3);
+  const resolved = resolveImageUrl(dream.image_url);
+  const fallbackClass = thumbnailClassName ?? getPaletteClass({ keywords: dream.keywords, scenes: dream.scenes });
 
   return (
     <button
@@ -19,12 +28,12 @@ export function DreamCard({ dream, onClick, tags, thumbnailClassName, marker }: 
     >
       <div className="min-w-0">
         <div className="flex items-center gap-2 text-[13px] font-medium text-[#718092]">
-          <span>{dream.time}</span>
+          <span>{formatTimeLabel(dream.created_at)}</span>
           {marker}
         </div>
         <h3 className="mt-2 truncate text-[17px] font-semibold leading-tight text-[var(--text)]">{dream.title}</h3>
         <div className="mt-2.5 flex flex-wrap gap-1.5 overflow-hidden">
-          {visibleTags.slice(0, 3).map((tag) => (
+          {visibleTags.map((tag) => (
             <span key={tag} className="rounded-[6px] bg-[#f0f1f1] px-2.5 py-0.5 text-[11px] font-medium text-[#6c7785]">
               {tag}
             </span>
@@ -32,9 +41,8 @@ export function DreamCard({ dream, onClick, tags, thumbnailClassName, marker }: 
         </div>
       </div>
       <div
-        className={`h-[64px] rounded-[10px] bg-cover bg-center shadow-[inset_0_0_0_1px_rgba(255,255,255,0.32)] ${
-          thumbnailClassName ?? `bg-gradient-to-br ${dream.palette}`
-        }`}
+        className={`h-[64px] rounded-[10px] bg-cover bg-center shadow-[inset_0_0_0_1px_rgba(255,255,255,0.32)] ${resolved ? "" : fallbackClass}`}
+        style={resolved ? { backgroundImage: `url("${resolved}")` } : undefined}
       />
     </button>
   );

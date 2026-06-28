@@ -1,39 +1,55 @@
-import { mockDreams } from '../data/mockDreams';
-import type { AudioFile, Dream } from '../types/dream';
+import { request } from "./http";
+import type {
+  DreamImageResponse,
+  DreamListResponse,
+  DreamRecord,
+  DreamSource,
+  HealthResponse,
+} from "../types/dream";
 
-const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
-
-export async function fetchDreams(): Promise<Dream[]> {
-  await wait(350);
-  return mockDreams;
+export function checkHealth(): Promise<HealthResponse> {
+  return request("/api/v1/health");
 }
 
-export async function fetchDreamById(id: string): Promise<Dream | undefined> {
-  await wait(250);
-  return mockDreams.find((dream) => dream.id === id);
+export function listDreams(params?: { limit?: number; offset?: number }): Promise<DreamListResponse> {
+  const limit = params?.limit ?? 20;
+  const offset = params?.offset ?? 0;
+  return request(`/api/v1/dreams?limit=${limit}&offset=${offset}`);
 }
 
-type CreateDreamInput = {
-  rawText: string;
-  audio?: AudioFile;
-};
-
-export async function createDream(input: CreateDreamInput): Promise<Dream> {
-  await wait(1200 + Math.round(Math.random() * 600));
-  const rawText = input.rawText.trim();
-
-  return {
-    ...mockDreams[0],
-    id: `draft-${Date.now()}`,
-    title: rawText.length > 12 ? `${rawText.slice(0, 12)}...` : '刚刚记录的梦',
-    date: '2026年6月28日',
-    time: '现在',
-    groupDate: '今天',
-    originalText: rawText || '语音记录整理中',
-    audio: input.audio,
-  };
+export function fetchDreamById(id: string): Promise<DreamRecord> {
+  return request(`/api/v1/dreams/${encodeURIComponent(id)}`);
 }
 
-export async function organizeDream(input: string): Promise<Dream> {
-  return createDream({ rawText: input });
+export function createDream(body: {
+  raw_text: string;
+  source?: DreamSource;
+  generate_image?: boolean;
+}): Promise<DreamRecord> {
+  return request("/api/v1/dreams", {
+    method: "POST",
+    body: JSON.stringify({
+      source: "text",
+      generate_image: false,
+      ...body,
+    }),
+  });
+}
+
+export function reorganizeDream(id: string, style?: string): Promise<DreamRecord> {
+  return request(`/api/v1/dreams/${encodeURIComponent(id)}/reorganize`, {
+    method: "POST",
+    body: JSON.stringify(style ? { style } : {}),
+  });
+}
+
+export function generateDreamImage(id: string, useMock = false): Promise<DreamImageResponse> {
+  return request(`/api/v1/dreams/${encodeURIComponent(id)}/generate-image`, {
+    method: "POST",
+    body: JSON.stringify({ use_mock: useMock }),
+  });
+}
+
+export function deleteDream(id: string): Promise<void> {
+  return request(`/api/v1/dreams/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
