@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, FileText, Image, Loader2, MoreHorizontal, Pencil, RefreshCcw, Sparkles } from "lucide-react";
+import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import { ArrowLeft, FileText, Image, Loader2, MoreHorizontal, Pencil, RefreshCcw, Sparkles, X } from "lucide-react";
 import { AudioFileCard } from "../components/AudioFileCard";
 import { generateDreamImage, reorganizeDream } from "../services/api";
 import { ApiError } from "../services/http";
@@ -11,15 +11,17 @@ function heroGradientClass(dream: Dream) {
   return getPaletteClass({ keywords: dream.keywords, scenes: dream.scenes });
 }
 
-export function DreamDetail({ dream }: { dream: Dream }) {
+export function DreamDetail({ dream, onBack }: { dream: Dream; onBack?: () => void }) {
   const [current, setCurrent] = useState<Dream>(dream);
   const [isReorganizing, setIsReorganizing] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isImageOpen, setIsImageOpen] = useState(false);
 
   useEffect(() => {
     setCurrent(dream);
     setError(null);
+    setIsImageOpen(false);
   }, [dream]);
 
   const resolved = resolveImageUrl(current.image_url);
@@ -60,10 +62,32 @@ export function DreamDetail({ dream }: { dream: Dream }) {
     return `${date} ${time}`.trim();
   }, [current.created_at]);
 
+  useEffect(() => {
+    if (!isImageOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsImageOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [isImageOpen]);
+
+  const stop = (e: MouseEvent) => e.stopPropagation();
+
   return (
     <article className="-mx-7 -mt-5 pb-32">
-      <section className={`relative h-[252px] overflow-hidden rounded-b-[26px] bg-cover bg-center text-white ${resolved ? "" : heroGradientClass(current)}`}
+      <section
+        className={`relative h-[252px] overflow-hidden rounded-b-[26px] bg-cover bg-center text-white ${resolved ? "cursor-zoom-in" : heroGradientClass(current)}`}
         style={resolved ? { backgroundImage: `url("${resolved}")` } : undefined}
+        onClick={resolved ? () => setIsImageOpen(true) : undefined}
+        role={resolved ? "button" : undefined}
+        aria-label={resolved ? "查看大图" : undefined}
+        tabIndex={resolved ? 0 : undefined}
+        onKeyDown={resolved ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setIsImageOpen(true); } } : undefined}
       >
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,.42),rgba(0,0,0,.08)_45%,rgba(0,0,0,.58))]" />
         <div className="relative z-10 flex items-center justify-between px-7 pt-6">
@@ -75,10 +99,10 @@ export function DreamDetail({ dream }: { dream: Dream }) {
           </div>
         </div>
         <div className="relative z-10 mt-5 flex items-center justify-between px-5">
-          <button type="button" aria-label="返回" className="flex h-10 w-10 items-center justify-center rounded-full bg-black/24 text-white backdrop-blur">
+          <button type="button" aria-label="返回" onClick={(e) => { stop(e); onBack?.(); }} className="flex h-10 w-10 items-center justify-center rounded-full bg-black/24 text-white backdrop-blur">
             <ArrowLeft size={24} />
           </button>
-          <button type="button" aria-label="更多" className="flex h-10 w-10 items-center justify-center rounded-full bg-black/24 text-white backdrop-blur">
+          <button type="button" aria-label="更多" onClick={stop} className="flex h-10 w-10 items-center justify-center rounded-full bg-black/24 text-white backdrop-blur">
             <MoreHorizontal size={25} />
           </button>
         </div>
@@ -86,9 +110,9 @@ export function DreamDetail({ dream }: { dream: Dream }) {
           <p className="text-[14px] font-medium text-white/88">{heroLabel}</p>
           <div className="mt-2 flex items-end justify-between gap-4">
             <h1 className="text-[27px] font-bold leading-tight text-white">{current.title}</h1>
-            <button type="button" className="rounded-[13px] bg-white/22 px-4 py-2.5 text-[14px] font-semibold text-white backdrop-blur">
+            {/* <button type="button" onClick={stop} className="rounded-[13px] bg-white/22 px-4 py-2.5 text-[14px] font-semibold text-white backdrop-blur">
               编辑
-            </button>
+            </button> */}
           </div>
         </div>
         {current.status === "image_generated" && resolved && (
@@ -159,6 +183,31 @@ export function DreamDetail({ dream }: { dream: Dream }) {
           {isGenerating ? "生成中" : resolved ? "已生成" : "生成画面"}
         </button>
       </div>
+
+      {isImageOpen && resolved && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 backdrop-blur-sm"
+          onClick={() => setIsImageOpen(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="梦境图像大图"
+        >
+          <button
+            type="button"
+            aria-label="关闭大图"
+            onClick={(e) => { stop(e); setIsImageOpen(false); }}
+            className="absolute right-5 top-5 flex h-10 w-10 items-center justify-center rounded-full bg-white/14 text-white backdrop-blur transition hover:bg-white/22"
+          >
+            <X size={22} />
+          </button>
+          <img
+            src={resolved}
+            alt={current.title}
+            onClick={stop}
+            className="max-h-[88vh] max-w-[92vw] rounded-[18px] object-contain shadow-[0_20px_60px_rgba(0,0,0,0.6)]"
+          />
+        </div>
+      )}
     </article>
   );
 }

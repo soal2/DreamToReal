@@ -1,52 +1,121 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Battery, ChevronRight, Lightbulb, Play, RotateCcw, Signal, Wifi } from "lucide-react";
 import { createDream } from "../services/api";
 import { ApiError } from "../services/http";
 import type { AudioFile, Dream } from "../types/dream";
 import { LoadingState } from "../components/LoadingState";
-import { SegmentedControl } from "../components/SegmentedControl";
 import { TagChip } from "../components/TagChip";
 import { VoiceRecordButton } from "../components/VoiceRecordButton";
 
-type RecordMode = "text" | "voice";
 type RecordState = "idle" | "recording" | "recorded" | "processing";
 
 const promptTags = ["场景", "人物", "情绪", "对话", "动作"];
 
+function getSpeechRecognition(): any {
+  if (typeof window === "undefined") return null;
+  return (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition || null;
+}
+
 export function Home({ onDreamReady }: { onDreamReady: (dream: Dream) => void }) {
-  const [inputMode, setInputMode] = useState<RecordMode>("voice");
   const [recordState, setRecordState] = useState<RecordState>("idle");
   const [draftText, setDraftText] = useState("");
+  const [interimText, setInterimText] = useState("");
   const [pendingAudio, setPendingAudio] = useState<AudioFile | undefined>();
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const canConfirm = inputMode === "text" ? draftText.trim().length > 0 : Boolean(pendingAudio);
+  const recognitionRef = useRef<any>(null);
+  const usedSttRef = useRef(false);
+  const canConfirm = draftText.trim().length > 0 || Boolean(pendingAudio);
 
   const toggleTag = (tag: string) => {
     setSelectedTags((current) => (current.includes(tag) ? current.filter((item) => item !== tag) : [...current, tag]));
   };
 
-  const changeInputMode = (nextMode: RecordMode) => {
-    setInputMode(nextMode);
-    setRecordState("idle");
-    setPendingAudio(undefined);
-  };
-
   const toggleRecording = () => {
-    if (inputMode !== "voice" || recordState === "processing") return;
+    if (recordState === "processing") return;
+
     if (recordState === "recording") {
-      setPendingAudio({
-        name: "梦境录音_06-48.webm",
-        duration: "00:18",
-        size: "248 KB",
-        storage: "本地暂存",
-      });
-      setRecordState("recorded");
+      recognitionRef.current?.stop();
       return;
     }
-    setPendingAudio(undefined);
-    setRecordState("recording");
+
+    const SR = getSpeechRecognition();
+    if (!SR) {
+      setError(
+        window.isSecureContext
+          ? "当前浏览器不支持语音识别，建议使用 Chrome / Edge / Safari"
+          : "语音识别需要 HTTPS 或 localhost 环境（当前页面非安全上下文）",
+      );
+      return;
+    }
+
+    const recognition = new SR();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "zh-CN";
+
+    recognition.onresult = (event: any) => {
+      let finalChunk = "";
+      let interim = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i];
+        const transcript = result[0].transcript;
+        if (result.isFinal) finalChunk += transcript;
+        else interim += transcript;
+      }
+      if (finalChunk) {
+        usedSttRef.current = true;
+        setDraftText((prev) => prev + finalChunk);
+      }
+      setInterimText(interim);
+    };
+
+    recognition.onerror = (event: any) => {
+      const code = event?.error;
+      if (code === "not-allowed" || code === "service-not-allowed") {
+        setError("麦克风权限被拒绝，请在浏览器设置中开启");
+      } else if (code === "network") {
+        setError("语音识别需要联网（部分浏览器依赖 Google 服务），请检查网络或更换浏览器");
+      } else if (code === "language-not-supported") {
+        setError("当前浏览器不支持中文识别，请尝试 Chrome 或 Edge");
+      } else if (code === "audio-capture") {
+        setError("未检测到麦克风设备");
+      } else if (code !== "aborted" && code !== "no-speech") {
+        setError(`语音识别失败：${code || "未知错误"}`);
+      }
+    };
+
+    recognition.onend = () => {
+      setInterimText("");
+      setRecordState((prev) => (prev === "recording" ? "idle" : prev));
+      recognitionRef.current = null;
+    };
+
+    try {
+      recognition.start();
+      recognitionRef.current = recognition;
+      setError(null);
+      setRecordState("recording");
+    } catch (err) {
+      setError(`无法启动语音识别：${(err as Error)?.message ?? "未知错误"}`);
+    }
   };
+
+  useEffect(() => {
+    return () => {
+      recognitionRef.current?.abort();
+    };
+  }, []);
+
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.hidden && recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, []);
 
   const resetRecording = () => {
     setPendingAudio(undefined);
@@ -55,12 +124,13 @@ export function Home({ onDreamReady }: { onDreamReady: (dream: Dream) => void })
 
   const submit = async () => {
     if (!canConfirm || recordState === "processing") return;
+    recognitionRef.current?.stop();
     setError(null);
     setRecordState("processing");
     try {
       const dream = await createDream({
         raw_text: draftText.trim() || "（语音记录待识别）",
-        source: inputMode === "voice" ? "voice" : "text",
+        source: usedSttRef.current ? "voice" : pendingAudio ? "voice" : "text",
         generate_image: false,
       });
       const enriched: Dream = pendingAudio ? { ...dream, audio: pendingAudio } : dream;
@@ -68,6 +138,7 @@ export function Home({ onDreamReady }: { onDreamReady: (dream: Dream) => void })
       setDraftText("");
       setPendingAudio(undefined);
       setSelectedTags([]);
+      usedSttRef.current = false;
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "请求失败，请稍后重试");
     } finally {
@@ -97,15 +168,6 @@ export function Home({ onDreamReady }: { onDreamReady: (dream: Dream) => void })
         </div>
       ) : (
         <section className="mt-7">
-          <SegmentedControl
-            value={inputMode}
-            onChange={changeInputMode}
-            options={[
-              { label: "文字记录", value: "text" },
-              { label: "语音记录", value: "voice" },
-            ]}
-          />
-
           <div className="relative">
             <textarea
               value={draftText}
@@ -120,17 +182,22 @@ export function Home({ onDreamReady }: { onDreamReady: (dream: Dream) => void })
               className="mt-5 h-[172px] w-full resize-none rounded-[28px] border border-[#e7e6e3] bg-[#fbfbf9] px-5 py-5 pb-10 text-[15px] leading-7 text-[var(--text)] shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] outline-none placeholder:text-[#9aa1a9] focus:border-[#dbdee1]"
             />
             <span className="absolute bottom-4 right-6 text-xs text-[#b0b5ba]">{draftText.length}/2000</span>
+            {interimText && (
+              <span className="absolute bottom-4 left-6 max-w-[60%] truncate text-xs text-[#9aa1a9]">
+                {interimText}
+              </span>
+            )}
           </div>
 
           <div className="mt-5 text-center">
             <VoiceRecordButton isRecording={recordState === "recording"} onClick={toggleRecording} />
             <p className="-mt-1 text-[15.5px] font-medium text-[var(--text)]">
-              {recordState === "recording" ? "正在录音，点击停止" : "长按录音，松开发送"}
+              {recordState === "recording" ? "正在录音，点击停止" : "点击录音，再次点击停止"}
             </p>
             <p className="mt-2 text-[12.5px] leading-5 text-[#8a939e]">录完后我会帮你整理成更完整的梦境叙述</p>
           </div>
 
-          {inputMode === "voice" && pendingAudio && (
+          {pendingAudio && (
             <section className="mt-4 rounded-[18px] border border-[#e5e3df] bg-[#fbfaf7] px-4 py-3 shadow-[0_5px_14px_rgba(31,45,61,0.026)]">
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">

@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import logging
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
@@ -10,6 +11,11 @@ from fastapi.staticfiles import StaticFiles
 from app.core.config import BACKEND_DIR, settings
 
 load_dotenv(BACKEND_DIR / ".env", override=False)
+
+logging.basicConfig(
+    level=settings.dtr_log_level.upper(),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
 
 from app.api.v1 import dreams, health
 from app.core.database import init_db

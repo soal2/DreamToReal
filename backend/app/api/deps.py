@@ -6,6 +6,9 @@ from app.providers.image.base import ImageProvider
 from app.providers.image.mock_image_provider import MockImageProvider
 from app.providers.image.openai_image_provider import OpenAIImageProvider
 from app.providers.image.stepfun_image_provider import StepFunImageProvider
+from app.providers.llm.base import DreamOrganizerProvider
+from app.providers.llm.mock_llm_provider import MockLLMProvider
+from app.providers.llm.stepfun_llm_provider import StepFunLLMProvider
 from app.repositories.dream_repository import DreamRepository
 from app.services.dream_delete_service import DreamDeleteService
 from app.services.dream_generation_service import DreamGenerationService
@@ -25,7 +28,15 @@ def get_image_storage() -> ImageStorage:
 
 @lru_cache
 def get_organizer_graph() -> DreamOrganizerGraph:
-    return DreamOrganizerGraph()
+    return DreamOrganizerGraph(provider=_get_llm_provider())
+
+
+def _get_llm_provider() -> DreamOrganizerProvider:
+    provider_name = settings.dtr_llm_provider.lower()
+    if provider_name == "stepfun":
+        settings.require_llm_credentials()
+        return StepFunLLMProvider()
+    return MockLLMProvider()
 
 
 def _get_image_provider() -> ImageProvider:
