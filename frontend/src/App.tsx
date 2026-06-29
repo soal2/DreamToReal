@@ -68,7 +68,7 @@ function AppContent() {
   const content = (() => {
     if (activeTab === "home") return <Home onDreamReady={handleDreamReady} />;
     if (activeTab === "archive") {
-      return selectedDream ? <DreamDetail dream={selectedDream} /> : <Archive dreams={dreams} onSelectDream={openDream} />;
+      return selectedDream ? <DreamDetail dream={selectedDream} onBack={() => setSelectedDream(null)} /> : <Archive dreams={dreams} onSelectDream={openDream} />;
     }
     if (activeTab === "insight") return <Insight />;
     return <Profile />;
