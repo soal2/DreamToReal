@@ -44,3 +44,22 @@ Thumbs.db
 tmp/
 temp/
 .cache/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.sqlite3
+
+# CodeGraph index
+.codegraph/
+
+# Backend generated assets
+backend/var/
+backend/static/images/
+
+# OS files
+.DS_Store
+Thumbs.db
